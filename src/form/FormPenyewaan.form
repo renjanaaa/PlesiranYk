@@ -707,7 +707,7 @@
                                   <Component id="lblDriver" alignment="0" min="-2" max="-2" attributes="0"/>
                                   <Component id="lblNoHPDriv" alignment="0" min="-2" max="-2" attributes="0"/>
                               </Group>
-                              <EmptySpace max="32767" attributes="0"/>
+                              <EmptySpace pref="52" max="32767" attributes="0"/>
                               <Group type="103" groupAlignment="0" max="-2" attributes="0">
                                   <Component id="txtNoHPDriv" pref="299" max="32767" attributes="0"/>
                                   <Component id="txtNamaDriver" max="32767" attributes="0"/>
@@ -717,8 +717,7 @@
                           </Group>
                           <Group type="102" attributes="0">
                               <Component id="lblnfoDriv" min="-2" max="-2" attributes="0"/>
-                              <EmptySpace max="32767" attributes="0"/>
-                              <Component id="chkDriver" min="-2" pref="137" max="-2" attributes="0"/>
+                              <EmptySpace min="0" pref="0" max="32767" attributes="0"/>
                           </Group>
                       </Group>
                       <EmptySpace max="-2" attributes="0"/>
@@ -729,10 +728,7 @@
               <Group type="103" groupAlignment="0" attributes="0">
                   <Group type="102" alignment="0" attributes="0">
                       <EmptySpace max="-2" attributes="0"/>
-                      <Group type="103" groupAlignment="3" attributes="0">
-                          <Component id="chkDriver" alignment="3" min="-2" pref="17" max="-2" attributes="0"/>
-                          <Component id="lblnfoDriv" alignment="3" min="-2" max="-2" attributes="0"/>
-                      </Group>
+                      <Component id="lblnfoDriv" min="-2" max="-2" attributes="0"/>
                       <EmptySpace type="separate" max="-2" attributes="0"/>
                       <Group type="103" groupAlignment="3" attributes="0">
                           <Component id="lblDriver" alignment="3" min="-2" max="-2" attributes="0"/>
@@ -792,17 +788,6 @@
               <Events>
                 <EventHandler event="actionPerformed" listener="java.awt.event.ActionListener" parameters="java.awt.event.ActionEvent" handler="txtNoHPDrivActionPerformed"/>
               </Events>
-            </Component>
-            <Component class="javax.swing.JCheckBox" name="chkDriver">
-              <Properties>
-                <Property name="font" type="java.awt.Font" editor="org.netbeans.beaninfo.editors.FontEditor">
-                  <Font name="Poppins" size="12" style="1"/>
-                </Property>
-                <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
-                  <Color blue="ff" green="ff" red="ff" type="rgb"/>
-                </Property>
-                <Property name="text" type="java.lang.String" value="DENGAN DRIVER"/>
-              </Properties>
             </Component>
             <Component class="javax.swing.JButton" name="btnCariDriv">
               <Properties>

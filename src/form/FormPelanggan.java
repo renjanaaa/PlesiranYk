@@ -256,20 +256,55 @@ public class FormPelanggan extends javax.swing.JPanel {
         }
 
         ModelPelanggan p = tableModel.getPelangganAt(row);
-        int konfirmasi = JOptionPane.showConfirmDialog(this, 
-                "Yakin ingin menghapus pelanggan: " + p.getNama() + " (" + p.getNoKtp() + ")?", 
-                "Konfirmasi Hapus", JOptionPane.YES_NO_OPTION);
-        if (konfirmasi != JOptionPane.YES_OPTION) return;
 
+        if (isPelangganHasHistory(p.getId())) {
+            int confirm = JOptionPane.showConfirmDialog(this, 
+                "Pelanggan " + p.getNama() + " memiliki riwayat penyewaan.\n" +
+                "Data tidak akan dihapus permanen, hanya dinonaktifkan.\n\n" +
+                "Lanjutkan?", 
+                "Konfirmasi Nonaktifkan Pelanggan", 
+                JOptionPane.YES_NO_OPTION);
+
+            if (confirm != JOptionPane.YES_OPTION) return;
+
+        } else {
+
+            int konfirmasi = JOptionPane.showConfirmDialog(this, 
+                "Yakin ingin menghapus pelanggan: " + p.getNama() + "?", 
+                "Konfirmasi Hapus", JOptionPane.YES_NO_OPTION);
+            if (konfirmasi != JOptionPane.YES_OPTION) return;
+
+            hardDeletePelanggan(p.getId());
+        }
+    }
+
+    private boolean isPelangganHasHistory(int pelangganId) {
         try (Connection conn = koneksi.getConnection()) {
-            String sql = "DELETE FROM pelanggan WHERE id=?";
+            String sql = "SELECT COUNT(*) FROM penyewaan WHERE pelanggan_id = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
-            ps.setInt(1, p.getId());
+            ps.setInt(1, pelangganId);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                return rs.getInt(1) > 0;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error checking pelanggan history: " + e.getMessage());
+        }
+        return false;
+    }
+
+    private void hardDeletePelanggan(int pelangganId) {
+        try (Connection conn = koneksi.getConnection()) {
+            String sql = "DELETE FROM pelanggan WHERE id = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setInt(1, pelangganId);
             ps.executeUpdate();
-            JOptionPane.showMessageDialog(this, "Data pelanggan berhasil dihapus!");
+
+            JOptionPane.showMessageDialog(this, "Pelanggan berhasil dihapus!");
             loadData();
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Gagal menghapus data: " + ex.getMessage());
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Gagal menghapus pelanggan: " + e.getMessage());
         }
     }
 

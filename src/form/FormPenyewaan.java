@@ -488,9 +488,7 @@ public class FormPenyewaan extends JPanel {
             }
         });
         setupCalculationEvents();
-        
-        // Driver checkbox
-        chkDriver.addActionListener(e -> toggleDriverFields());
+
     }
     
     private void setupCalculationEvents() {
@@ -580,10 +578,12 @@ public class FormPenyewaan extends JPanel {
     private void cariDriver() {
         DialogCariDriver dialog = new DialogCariDriver((JFrame) SwingUtilities.getWindowAncestor(this));
         dialog.setVisible(true);
-        
+
         if (dialog.isSelected()) {
             selectedDriver = dialog.getSelectedDriver();
             fillDriverFields();
+
+            System.out.println("Driver dipilih: " + selectedDriver.getNama() + " (ID: " + selectedDriver.getId() + ")");
         }
     }
     
@@ -893,8 +893,48 @@ public class FormPenyewaan extends JPanel {
         txtHargaSewa.setText("");
         selectedMobil = null;
     }
+    
+    private void updateStatusDriver(Connection conn, int driverId, String status) throws SQLException {
+        String sql = "UPDATE driver SET status = ? WHERE id = ?";
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setString(1, status);
+        ps.setInt(2, driverId);
+        int rowsAffected = ps.executeUpdate();
+        System.out.println("Driver ID " + driverId + " status updated to: " + status + " (Rows affected: " + rowsAffected + ")");
+    }
 
-    // Database operations
+    private void resetDriverStatusYangTidakDigunakan(Connection conn) throws SQLException {
+        String sql = """
+            UPDATE driver SET status = 'tidak aktif' 
+            WHERE id NOT IN (
+                SELECT DISTINCT driver_id 
+                FROM penyewaan 
+                WHERE driver_id IS NOT NULL 
+                AND status IN ('Aktif', 'Berlangsung')
+            )
+        """;
+
+        PreparedStatement ps = conn.prepareStatement(sql);
+        int rowsAffected = ps.executeUpdate();
+        System.out.println("Reset status driver yang tidak digunakan: " + rowsAffected + " drivers");
+    }
+
+    private void setDriverAktifYangDigunakan(Connection conn) throws SQLException {
+        String sql = """
+            UPDATE driver SET status = 'aktif' 
+            WHERE id IN (
+                SELECT DISTINCT driver_id 
+                FROM penyewaan 
+                WHERE driver_id IS NOT NULL 
+                AND status IN ('Aktif', 'Berlangsung')
+            )
+        """;
+
+        PreparedStatement ps = conn.prepareStatement(sql);
+        int rowsAffected = ps.executeUpdate();
+        System.out.println("Set driver aktif yang sedang digunakan: " + rowsAffected + " drivers");
+    }
+
     private void simpanData() {
         if (!validateInput()) return;
 
@@ -915,6 +955,14 @@ public class FormPenyewaan extends JPanel {
                 for (Integer mobilId : mobilIds) {
                     updateStatusMobil(conn, mobilId, "disewakan");
                 }
+                
+                resetDriverStatusYangTidakDigunakan(conn);
+
+                if (selectedDriver != null) {
+                    updateStatusDriver(conn, selectedDriver.getId(), "aktif");
+                }
+
+                setDriverAktifYangDigunakan(conn);
 
                 conn.commit();
                 JOptionPane.showMessageDialog(this, "Data penyewaan berhasil disimpan!\nStatus mobil telah diupdate menjadi 'disewakan'.");
@@ -1005,7 +1053,6 @@ public class FormPenyewaan extends JPanel {
         }
     }
 
-    // Method untuk debug status mobil setelah save
     private void debugMobilStatusAfterSave() {
         try (Connection conn = koneksi.getConnection()) {
             String sql = "SELECT no_polisi, status FROM mobil ORDER BY no_polisi";
@@ -1031,9 +1078,15 @@ public class FormPenyewaan extends JPanel {
         PreparedStatement ps = conn.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS);
 
         ps.setString(1, txtPenyewaan.getText().trim());
-        ps.setString(2, selectedPelanggan.getNama()); // Simpan nama pelanggan
-        ps.setInt(3, selectedPelanggan.getId()); // Simpan ID pelanggan juga
-        ps.setObject(4, chkDriver.isSelected() && selectedDriver != null ? selectedDriver.getId() : null);
+        ps.setString(2, selectedPelanggan.getNama());
+        ps.setInt(3, selectedPelanggan.getId());
+
+        if (selectedDriver != null) {
+            ps.setInt(4, selectedDriver.getId());
+        } else {
+            ps.setNull(4, java.sql.Types.INTEGER); 
+        }
+
         ps.setString(5, txtTanggalSewa.getText().trim());
         ps.setString(6, txtTanggalKembali.getText().trim());
         ps.setInt(7, Integer.parseInt(txtTotalHari.getText().trim()));
@@ -1093,10 +1146,12 @@ public class FormPenyewaan extends JPanel {
             showError("Minimal satu mobil harus dipilih!");
             return false;
         }
-        if (chkDriver.isSelected() && selectedDriver == null) {
-            showError("Driver harus dipilih jika menggunakan driver!");
+
+        if (!txtNamaDriver.getText().trim().isEmpty() && selectedDriver == null) {
+            showError("Jika nama driver diisi, silakan pilih driver dari database!");
             return false;
         }
+
         return true;
     }
     
@@ -1151,7 +1206,6 @@ public class FormPenyewaan extends JPanel {
         lblNoHPDriv = new javax.swing.JLabel();
         txtNamaDriver = new javax.swing.JTextField();
         txtNoHPDriv = new javax.swing.JTextField();
-        chkDriver = new javax.swing.JCheckBox();
         btnCariDriv = new javax.swing.JButton();
         jPanel6 = new javax.swing.JPanel();
         lblKet = new javax.swing.JLabel();
@@ -1575,10 +1629,6 @@ public class FormPenyewaan extends JPanel {
             }
         });
 
-        chkDriver.setFont(new java.awt.Font("Poppins", 1, 12)); // NOI18N
-        chkDriver.setForeground(new java.awt.Color(255, 255, 255));
-        chkDriver.setText("DENGAN DRIVER");
-
         btnCariDriv.setFont(new java.awt.Font("Poppins", 1, 12)); // NOI18N
         btnCariDriv.setForeground(javax.swing.UIManager.getDefaults().getColor("Actions.Blue"));
         btnCariDriv.setText("CARI");
@@ -1599,7 +1649,7 @@ public class FormPenyewaan extends JPanel {
                         .addGroup(jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                             .addComponent(lblDriver)
                             .addComponent(lblNoHPDriv))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 52, Short.MAX_VALUE)
                         .addGroup(jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                             .addComponent(txtNoHPDriv, javax.swing.GroupLayout.DEFAULT_SIZE, 299, Short.MAX_VALUE)
                             .addComponent(txtNamaDriver))
@@ -1607,17 +1657,14 @@ public class FormPenyewaan extends JPanel {
                         .addComponent(btnCariDriv))
                     .addGroup(jPanel5Layout.createSequentialGroup()
                         .addComponent(lblnfoDriv)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                        .addComponent(chkDriver, javax.swing.GroupLayout.PREFERRED_SIZE, 137, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                        .addGap(0, 0, Short.MAX_VALUE)))
                 .addContainerGap())
         );
         jPanel5Layout.setVerticalGroup(
             jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel5Layout.createSequentialGroup()
                 .addContainerGap()
-                .addGroup(jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(chkDriver, javax.swing.GroupLayout.PREFERRED_SIZE, 17, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(lblnfoDriv))
+                .addComponent(lblnfoDriv)
                 .addGap(18, 18, 18)
                 .addGroup(jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(lblDriver)
@@ -2059,7 +2106,6 @@ public class FormPenyewaan extends JPanel {
     private javax.swing.JButton btnSimpan;
     private javax.swing.JButton btnTambah1;
     private javax.swing.JButton btnTambahSewa;
-    private javax.swing.JCheckBox chkDriver;
     private javax.swing.JComboBox<String> cmbxStatus;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
@@ -2265,7 +2311,7 @@ public class FormPenyewaan extends JPanel {
         return null;
     }
    
-   private PenyewaanHeader buatHeaderUntukCetak() throws ParseException {
+    private PenyewaanHeader buatHeaderUntukCetak() throws ParseException {
         PenyewaanHeader header = new PenyewaanHeader();
 
         header.setKodePenyewaan(txtPenyewaan.getText());
@@ -2281,11 +2327,14 @@ public class FormPenyewaan extends JPanel {
         header.setSisaBayar(new BigDecimal(parseFromCurrency(jTextField3.getText())));
         header.setStatus(cmbxStatus.getSelectedItem().toString());
         header.setKeterangan(txtKet.getText());
-        header.setDenganDriver(chkDriver.isSelected());
 
-        if (chkDriver.isSelected() && selectedDriver != null) {
+        // Ganti kondisi checkbox dengan pengecekan field driver
+        if (!txtNamaDriver.getText().trim().isEmpty() && selectedDriver != null) {
+            header.setDenganDriver(true);
             header.setNamaDriver(txtNamaDriver.getText());
             header.setNoHpDriver(txtNoHPDriv.getText());
+        } else {
+            header.setDenganDriver(false);
         }
 
         return header;
@@ -2325,22 +2374,27 @@ public class FormPenyewaan extends JPanel {
        return sdf.format(date);
    }
 
-    // Method helper untuk parsing currency yang sudah ada di class Anda
-    private static double parseFromCurrency(String currencyStr) {
+    private double parseFromCurrency(String currencyStr) {
         if (currencyStr == null || currencyStr.trim().isEmpty()) {
             return 0.0;
         }
 
-        // Hapus semua karakter non-digit kecuali titik dan koma
-        String cleanStr = currencyStr.replaceAll("[^0-9.,]", "");
-
-        // Handle format Indonesia (1.000.000,00)
-        if (cleanStr.contains(",")) {
-            cleanStr = cleanStr.replace(".", "").replace(",", ".");
-        }
-
         try {
-            return Double.parseDouble(cleanStr);
+
+            String cleaned = currencyStr.replace("Rp", "").trim();
+
+            if (cleaned.contains(",")) {
+
+                String[] parts = cleaned.split(",");
+                String integerPart = parts[0].replace(".", ""); // Hapus titik pemisah ribuan
+                String decimalPart = parts.length > 1 ? parts[1] : "00";
+                cleaned = integerPart + "." + decimalPart;
+            } else {
+
+                cleaned = cleaned.replace(".", "");
+            }
+
+            return Double.parseDouble(cleaned);
         } catch (NumberFormatException e) {
             System.err.println("Error parsing currency: " + currencyStr);
             return 0.0;
@@ -2501,18 +2555,19 @@ public class FormPenyewaan extends JPanel {
     
     // Utility methods
     private void toggleDriverFields() {
-        boolean enabled = chkDriver.isSelected();
+   
+        boolean enabled = true;
         txtNamaDriver.setEnabled(enabled);
         txtNoHPDriv.setEnabled(enabled);
         btnCariDriv.setEnabled(enabled);
-        
+
         if (!enabled) {
             txtNamaDriver.setText("");
             txtNoHPDriv.setText("");
             selectedDriver = null;
         }
     }
-    
+
     private void clearInputFields() {
         
         JTextField[] fields = {
@@ -2540,9 +2595,6 @@ public class FormPenyewaan extends JPanel {
         selectedMobil = null;
         selectedDriver = null;
 
-        // Reset controls
-        chkDriver.setSelected(false);
-        cmbxStatus.setSelectedIndex(0);
         toggleDriverFields();
     }
     

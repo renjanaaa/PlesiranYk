@@ -37,7 +37,7 @@ public class TableModelDriver extends AbstractTableModel {
             case 2: return driver.getNoKtp();
             case 3: return driver.getNoHp();
             case 4: return driver.getAlamat();
-            case 5: return driver.getStatus();
+            case 5: return driver.getStatus(); // Pastikan ini benar
             default: return null;
         }
     }

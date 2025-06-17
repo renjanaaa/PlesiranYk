@@ -72,13 +72,13 @@ public class FormDashboard extends JPanel {
 
         // Title
         lblTitle = new JLabel("PLESIRAN YK");
-        lblTitle.setFont(new Font("Segoe UI", Font.BOLD, 32));
+        lblTitle.setFont(new Font("Poppins", Font.BOLD, 32));
         lblTitle.setForeground(new Color(44, 62, 80));
         lblTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         // Tagline
-        lblTagline = new JLabel("Partner Perjalanan Anda");
-        lblTagline.setFont(new Font("Segoe UI", Font.ITALIC, 16));
+        lblTagline = new JLabel("We Serve A Better Service For Your Trip");
+        lblTagline.setFont(new Font("Poppins", Font.ITALIC, 16));
         lblTagline.setForeground(new Color(127, 140, 141));
         lblTagline.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -478,68 +478,72 @@ public class FormDashboard extends JPanel {
         dialog.setVisible(true);
     }
     
-    // Show Detail Mobil
     private void showDetailMobil() {
         JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Detail Semua Mobil", true);
         dialog.setSize(700, 500);
         dialog.setLocationRelativeTo(this);
-        
-        String[] columns = {"No. Polisi", "Merk/Type", "Model", "Tahun", "Status"};
+
+        String[] columns = {"No. Polisi", "Merk", "Model", "Kapasitas", "Status"};
         javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(columns, 0);
-        
+
         try (Connection conn = koneksi.getConnection()) {
-            String sql = "SELECT no_polisi, merk_type, model, tahun, status FROM mobil ORDER BY status, no_polisi";
+            // PERBAIKAN: Hapus kolom 'tahun' yang tidak ada, gunakan kolom yang benar
+            String sql = "SELECT no_polisi, merk, model, kapasitas_penumpang, status " +
+                         "FROM mobil ORDER BY status, no_polisi";
             PreparedStatement ps = conn.prepareStatement(sql);
             ResultSet rs = ps.executeQuery();
-            
+
             while (rs.next()) {
                 model.addRow(new Object[]{
                     rs.getString("no_polisi"),
-                    rs.getString("merk_type"),
+                    rs.getString("merk"),
                     rs.getString("model"),
-                    rs.getString("tahun"),
+                    rs.getInt("kapasitas_penumpang") + " orang",
                     rs.getString("status")
                 });
             }
         } catch (SQLException e) {
+            System.err.println("Error in showDetailMobil: " + e.getMessage());
+            e.printStackTrace();
             JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
         }
-        
+
         JTable table = new JTable(model);
         JScrollPane scrollPane = new JScrollPane(table);
-        
+
         JButton btnClose = new JButton("Tutup");
         btnClose.addActionListener(e -> dialog.dispose());
-        
+
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(scrollPane, BorderLayout.CENTER);
         panel.add(btnClose, BorderLayout.SOUTH);
-        
+
         dialog.add(panel);
         dialog.setVisible(true);
     }
     
-    // Show Detail Mobil Keluar
     private void showDetailMobilKeluar() {
         JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Detail Mobil Keluar (Penyewaan Aktif)", true);
         dialog.setSize(800, 500);
         dialog.setLocationRelativeTo(this);
-        
+
         String[] columns = {"No. Polisi", "Merk/Type", "Kode Sewa", "Pelanggan", "Tgl Sewa", "Tgl Kembali"};
         javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(columns, 0);
-        
+
         try (Connection conn = koneksi.getConnection()) {
-            String sql = "SELECT m.no_polisi, m.merk_type, p.kode_penyewaan, p.nama_pelanggan, " +
+ 
+            String sql = "SELECT m.no_polisi, CONCAT(m.merk, ' ', m.model) as merk_type, " +
+                         "p.kode_penyewaan, p.nama_pelanggan, " +
                          "p.tanggal_sewa, p.tanggal_kembali_rencana " +
                          "FROM mobil m " +
                          "JOIN penyewaan_detail pd ON m.no_polisi = pd.no_polisi " +
                          "JOIN penyewaan p ON pd.penyewaan_id = p.id " +
                          "WHERE UPPER(TRIM(p.status)) = 'AKTIF' " +
                          "ORDER BY p.tanggal_kembali_rencana";
-            
+
             PreparedStatement ps = conn.prepareStatement(sql);
             ResultSet rs = ps.executeQuery();
-            
+
             while (rs.next()) {
                 model.addRow(new Object[]{
                     rs.getString("no_polisi"),
@@ -550,80 +554,105 @@ public class FormDashboard extends JPanel {
                     rs.getDate("tanggal_kembali_rencana")
                 });
             }
+
+            if (model.getRowCount() == 0) {
+                model.addRow(new Object[]{"Tidak ada", "mobil yang", "sedang disewa", "", "", ""});
+            }
+
         } catch (SQLException e) {
+            System.err.println("Error in showDetailMobilKeluar: " + e.getMessage());
+            e.printStackTrace();
             JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
         }
-        
+
         JTable table = new JTable(model);
         JScrollPane scrollPane = new JScrollPane(table);
-        
+
         JButton btnClose = new JButton("Tutup");
         btnClose.addActionListener(e -> dialog.dispose());
-        
+
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(scrollPane, BorderLayout.CENTER);
         panel.add(btnClose, BorderLayout.SOUTH);
-        
+
         dialog.add(panel);
         dialog.setVisible(true);
     }
     
-    // Show Detail Mobil Masuk
     private void showDetailMobilMasuk() {
-        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Detail Mobil Masuk (Pengembalian Hari Ini)", true);
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Detail Mobil Masuk", true);
         dialog.setSize(800, 500);
         dialog.setLocationRelativeTo(this);
-        
-        String[] columns = {"No. Polisi", "Merk/Type", "Kode Sewa", "Pelanggan", "Tgl Kembali", "Kondisi"};
+
+        String[] columns = {"No. Polisi", "Merk", "Model", "Status"};
         javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(columns, 0);
-        
+
         try (Connection conn = koneksi.getConnection()) {
-            String sql = "SELECT m.no_polisi, m.merk_type, p.kode_penyewaan, p.nama_pelanggan, " +
-                         "pg.tanggal_kembali, pg.kondisi_mobil " +
-                         "FROM pengembalian pg " +
-                         "JOIN penyewaan p ON pg.penyewaan_id = p.id " +
-                         "JOIN penyewaan_detail pd ON p.id = pd.penyewaan_id " +
-                         "JOIN mobil m ON pd.no_polisi = m.no_polisi " +
-                         "WHERE DATE(pg.tanggal_kembali) = CURDATE() " +
-                         "ORDER BY pg.tanggal_kembali DESC";
-            
+            // Query sederhana untuk menampilkan mobil yang tersedia
+            String sql = "SELECT no_polisi, merk, model, status FROM mobil WHERE status = 'tersedia'";
             PreparedStatement ps = conn.prepareStatement(sql);
             ResultSet rs = ps.executeQuery();
-            
+
             while (rs.next()) {
                 model.addRow(new Object[]{
                     rs.getString("no_polisi"),
-                    rs.getString("merk_type"),
-                    rs.getString("kode_penyewaan"),
-                    rs.getString("nama_pelanggan"),
-                    rs.getTimestamp("tanggal_kembali"),
-                    rs.getString("kondisi_mobil")
+                    rs.getString("merk"),
+                    rs.getString("model"),
+                    rs.getString("status")
                 });
             }
-            
+
             if (model.getRowCount() == 0) {
-                model.addRow(new Object[]{"Tidak ada", "pengembalian", "hari ini", "", "", ""});
+                model.addRow(new Object[]{"Tidak ada", "mobil", "tersedia", ""});
             }
-            
+
         } catch (SQLException e) {
+            System.err.println("Error: " + e.getMessage());
             JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+            model.addRow(new Object[]{"Error", "loading", "data", ""});
         }
-        
+
         JTable table = new JTable(model);
         JScrollPane scrollPane = new JScrollPane(table);
-        
+
         JButton btnClose = new JButton("Tutup");
         btnClose.addActionListener(e -> dialog.dispose());
-        
+
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(scrollPane, BorderLayout.CENTER);
         panel.add(btnClose, BorderLayout.SOUTH);
-        
+
         dialog.add(panel);
         dialog.setVisible(true);
     }
     
-    // Auto refresh
+    public void debugTableStructure() {
+        try (Connection conn = koneksi.getConnection()) {
+            System.out.println("=== STRUKTUR TABEL MOBIL ===");
+            String sql = "DESCRIBE mobil";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                System.out.println("Column: " + rs.getString("Field") + 
+                                 " | Type: " + rs.getString("Type"));
+            }
+
+            System.out.println("=== STRUKTUR TABEL PENYEWAAN ===");
+            sql = "DESCRIBE penyewaan";
+            ps = conn.prepareStatement(sql);
+            rs = ps.executeQuery();
+
+            while (rs.next()) {
+                System.out.println("Column: " + rs.getString("Field") + 
+                                 " | Type: " + rs.getString("Type"));
+            }
+
+        } catch (SQLException e) {
+            System.err.println("Error checking table structure: " + e.getMessage());
+        }
+    }
+   
     private void setupAutoRefresh() {
         refreshTimer = new Timer(30000, e -> {
             loadAllData();

@@ -165,29 +165,46 @@ public class DialogCariPelanggan extends JDialog {
             dispose();
         });
     }
-    
+
     private void loadData(String keyword) {
         try (Connection conn = koneksi.getConnection()) {
             String sql;
             PreparedStatement ps;
-            
+
             if (keyword.isEmpty()) {
-                sql = "SELECT * FROM pelanggan ORDER BY nama";
+                // QUERY DIPERBAIKI: Cari pelanggan yang TIDAK sedang menyewa
+                sql = "SELECT p.* FROM pelanggan p " +
+                      "WHERE p.id NOT IN ( " +
+                      "    SELECT DISTINCT penyewaan.pelanggan_id " +
+                      "    FROM penyewaan " +
+                      "    WHERE penyewaan.status = 'Aktif' " +
+                      ") " +
+                      "ORDER BY p.nama";
                 ps = conn.prepareStatement(sql);
             } else {
-                sql = "SELECT * FROM pelanggan WHERE nama LIKE ? OR no_ktp LIKE ? OR no_hp LIKE ? ORDER BY nama";
+                // QUERY DIPERBAIKI: Cari pelanggan berdasarkan keyword yang TIDAK sedang menyewa
+                sql = "SELECT p.* FROM pelanggan p " +
+                      "WHERE (p.nama LIKE ? OR p.no_ktp LIKE ? OR p.no_hp LIKE ?) " +
+                      "AND p.id NOT IN ( " +
+                      "    SELECT DISTINCT penyewaan.pelanggan_id " +
+                      "    FROM penyewaan " +
+                      "    WHERE penyewaan.status = 'Aktif' " +
+                      ") " +
+                      "ORDER BY p.nama";
                 ps = conn.prepareStatement(sql);
                 String searchPattern = "%" + keyword + "%";
                 ps.setString(1, searchPattern);
                 ps.setString(2, searchPattern);
                 ps.setString(3, searchPattern);
             }
-            
+
             ResultSet rs = ps.executeQuery();
             DefaultTableModel model = (DefaultTableModel) tablePelanggan.getModel();
             model.setRowCount(0);
-            
+
+            boolean hasData = false;
             while (rs.next()) {
+                hasData = true;
                 Object[] row = {
                     rs.getInt("id"),
                     rs.getString("nama"),
@@ -197,7 +214,22 @@ public class DialogCariPelanggan extends JDialog {
                 };
                 model.addRow(row);
             }
-            
+
+            // Tampilkan pesan jika tidak ada data
+            if (!hasData) {
+                if (keyword.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, 
+                        "Tidak ada pelanggan yang tersedia saat ini!\n" +
+                        "Semua pelanggan sedang dalam masa penyewaan.", 
+                        "Info", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(this, 
+                        "Tidak ada pelanggan tersedia dengan kata kunci: " + keyword + "\n" +
+                        "Coba kata kunci lain atau tunggu pelanggan selesai menyewa.", 
+                        "Info", JOptionPane.INFORMATION_MESSAGE);
+                }
+            }
+
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Gagal memuat data: " + e.getMessage());
             e.printStackTrace();

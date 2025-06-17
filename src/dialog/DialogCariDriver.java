@@ -164,22 +164,40 @@ public class DialogCariDriver extends JDialog {
         try (Connection conn = koneksi.getConnection()) {
             String sql;
             PreparedStatement ps;
-            
+
             if (keyword.isEmpty()) {
-                sql = "SELECT * FROM driver WHERE status = 'Aktif' ORDER BY nama";
+
+                sql = "SELECT d.* FROM driver d " +
+                      "WHERE d.status != 'deleted' " +
+                      "AND d.id NOT IN ( " +
+                      "    SELECT p.driver_id " +
+                      "    FROM penyewaan p " +
+                      "    WHERE p.status = 'Aktif' " +
+                      "    AND p.driver_id IS NOT NULL " +
+                      ") " +
+                      "ORDER BY d.nama";
                 ps = conn.prepareStatement(sql);
             } else {
-                sql = "SELECT * FROM driver WHERE (nama LIKE ? OR no_hp LIKE ?) AND status = 'Aktif' ORDER BY nama";
+                sql = "SELECT d.* FROM driver d " +
+                      "WHERE (d.nama LIKE ? OR d.no_hp LIKE ?) " +
+                      "AND d.status != 'deleted' " +
+                      "AND d.id NOT IN ( " +
+                      "    SELECT p.driver_id " +
+                      "    FROM penyewaan p " +
+                      "    WHERE p.status = 'Aktif' " +
+                      "    AND p.driver_id IS NOT NULL " +
+                      ") " +
+                      "ORDER BY d.nama";
                 ps = conn.prepareStatement(sql);
                 String searchPattern = "%" + keyword + "%";
                 ps.setString(1, searchPattern);
                 ps.setString(2, searchPattern);
             }
-            
+
             ResultSet rs = ps.executeQuery();
             DefaultTableModel model = (DefaultTableModel) tableDriver.getModel();
             model.setRowCount(0);
-            
+
             while (rs.next()) {
                 Object[] row = {
                     rs.getInt("id"),
@@ -187,13 +205,16 @@ public class DialogCariDriver extends JDialog {
                     rs.getString("no_hp"),
                     rs.getString("alamat"),
                     rs.getString("no_sim"),
-                    rs.getString("status")
+                    "TERSEDIA" // Status display
                 };
                 model.addRow(row);
             }
-            
+
+            rs.close();
+            ps.close();
+
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Gagal memuat data: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
             e.printStackTrace();
         }
     }

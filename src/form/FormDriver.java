@@ -230,9 +230,11 @@ public class FormDriver extends javax.swing.JPanel {
     // End of variables declaration//GEN-END:variables
     private void loadData() {
         try (Connection conn = koneksi.getConnection()) {
-            String sql = "SELECT * FROM driver ORDER BY id";
+
+            String sql = "SELECT * FROM driver WHERE status != 'deleted' ORDER BY id";
             PreparedStatement ps = conn.prepareStatement(sql);
             ResultSet rs = ps.executeQuery();
+
             List<ModelDriver> list = new ArrayList<>();
             while (rs.next()) {
                 ModelDriver d = new ModelDriver();
@@ -334,20 +336,70 @@ public class FormDriver extends javax.swing.JPanel {
         }
 
         ModelDriver d = tableModel.getDriverAt(row);
-        int konfirmasi = JOptionPane.showConfirmDialog(this, 
+
+        if (isDriverInUse(d.getId())) {
+            int confirm = JOptionPane.showConfirmDialog(this, 
+                "Driver " + d.getNama() + " masih memiliki riwayat penyewaan.\n" +
+                "Data tidak akan dihapus permanen, hanya dinonaktifkan.\n\n" +
+                "Lanjutkan?", 
+                "Konfirmasi Nonaktifkan Driver", 
+                JOptionPane.YES_NO_OPTION);
+
+            if (confirm != JOptionPane.YES_OPTION) return;
+
+            softDeleteDriver(d.getId());
+        } else {
+
+            int konfirmasi = JOptionPane.showConfirmDialog(this, 
                 "Yakin ingin menghapus driver: " + d.getNama() + "?", 
                 "Konfirmasi Hapus", JOptionPane.YES_NO_OPTION);
-        if (konfirmasi != JOptionPane.YES_OPTION) return;
+            if (konfirmasi != JOptionPane.YES_OPTION) return;
 
+            hardDeleteDriver(d.getId());
+        }
+    }
+
+    private boolean isDriverInUse(int driverId) {
         try (Connection conn = koneksi.getConnection()) {
-            String sql = "DELETE FROM driver WHERE id=?";
+            String sql = "SELECT COUNT(*) FROM penyewaan WHERE driver_id = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
-            ps.setInt(1, d.getId());
+            ps.setInt(1, driverId);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                return rs.getInt(1) > 0;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error checking driver usage: " + e.getMessage());
+        }
+        return false;
+    }
+
+    private void softDeleteDriver(int driverId) {
+        try (Connection conn = koneksi.getConnection()) {
+            String sql = "UPDATE driver SET status = 'deleted', updated_at = NOW() WHERE id = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setInt(1, driverId);
             ps.executeUpdate();
-            JOptionPane.showMessageDialog(this, "Data driver berhasil dihapus!");
+
+            JOptionPane.showMessageDialog(this, "Driver berhasil dinonaktifkan!");
             loadData();
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Gagal menghapus data: " + ex.getMessage());
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Gagal menonaktifkan driver: " + e.getMessage());
+        }
+    }
+
+    private void hardDeleteDriver(int driverId) {
+        try (Connection conn = koneksi.getConnection()) {
+            String sql = "DELETE FROM driver WHERE id = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setInt(1, driverId);
+            ps.executeUpdate();
+
+            JOptionPane.showMessageDialog(this, "Driver berhasil dihapus!");
+            loadData();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Gagal menghapus driver: " + e.getMessage());
         }
     }
 

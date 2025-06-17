@@ -45,6 +45,7 @@ import javax.swing.SwingUtilities;
 import java.util.concurrent.TimeUnit;
 import javax.swing.DefaultCellEditor;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.ListSelectionModel;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.TableCellRenderer;
@@ -65,7 +66,11 @@ public class FormPengembalian extends JPanel {
     private CardLayout cardLayout;
     private boolean isListView = true;
 
-    private static final double DENDA_PER_HARI = 50000;
+    private static final double DENDA_PER_JAM = 50000;
+    
+    private static final String[] KONDISI_OPTIONS = {
+        "Baik", "Rusak Ringan", "Rusak Sedang", "Rusak Berat"
+    };
     
     public FormPengembalian() {
         initializeFormatters();
@@ -302,44 +307,89 @@ public class FormPengembalian extends JPanel {
     }
     
     private void setupTableStyling() {
-        // Main table model untuk list penyewaan yang bisa dikembalikan
+
         String[] columnNames = {"No", "Kode Penyewaan", "Pelanggan", "Tanggal Sewa", "Tanggal Jatuh Tempo", "Status", "Aksi"};
         DefaultTableModel model = new DefaultTableModel(columnNames, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                return false; // Semua cell tidak bisa diedit
+                return false;
             }
         };
         jTable2.setModel(model);
-
-        // PENTING: Setup selection model
         jTable2.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        jTable2.setRowSelectionAllowed(true);
-        jTable2.setColumnSelectionAllowed(false);
-
-        // Enable table
-        jTable2.setEnabled(true);
-        jTable2.setFocusable(true);
-
-        // Table styling
         configureTable(jTable2);
 
-        // Detail table model untuk kondisi mobil
         String[] detailColumns = {"No", "Mobil", "No.Polisi", "Kondisi", "Denda Kerusakan", "Keterangan"};
         DefaultTableModel detailModel = new DefaultTableModel(detailColumns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                return column == 3 || column == 4 || column == 5; // Kondisi, Denda, Keterangan bisa diedit
+
+                return column == 3 || column == 4 || column == 5;
+            }
+            
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                if (columnIndex == 3) return String.class; // Kondisi
+                if (columnIndex == 4) return String.class; // Denda
+                return String.class;
             }
         };
         jTable1.setModel(detailModel);
 
-        configureTable(jTable1);
+        JComboBox<String> kondisiCombo = new JComboBox<>(KONDISI_OPTIONS);
+        jTable1.getColumnModel().getColumn(3).setCellEditor(new DefaultCellEditor(kondisiCombo));
 
-        // Set column widths
+        // Setup editor untuk denda kerusakan dengan format currency
+        JTextField dendaField = new JTextField();
+        dendaField.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                String text = dendaField.getText().trim();
+                if (!text.isEmpty()) {
+                    try {
+                        double value = parseDoubleFromCurrency(text);
+                        dendaField.setText(formatCurrency(value));
+                        // Hitung ulang total setelah perubahan
+                        hitungTotalPembayaran();
+                    } catch (Exception ex) {
+                        dendaField.setText("0");
+                    }
+                }
+            }
+        });
+        jTable1.getColumnModel().getColumn(4).setCellEditor(new DefaultCellEditor(dendaField));
+
+        configureTable(jTable1);
         setTableColumnWidths();
 
-        System.out.println("Table styling setup completed");
+        // Tambahkan listener untuk perubahan kondisi
+        detailModel.addTableModelListener(e -> {
+            if (e.getColumn() == 3) { // Kolom kondisi berubah
+                int row = e.getFirstRow();
+                String kondisi = (String) detailModel.getValueAt(row, 3);
+                
+                // Auto-set denda berdasarkan kondisi
+                double dendaOtomatis = getDendaByKondisi(kondisi);
+                detailModel.setValueAt(formatCurrency(dendaOtomatis), row, 4);
+                
+                // Hitung ulang total
+                hitungTotalPembayaran();
+            } else if (e.getColumn() == 4) { // Kolom denda berubah
+                hitungTotalPembayaran();
+            }
+        });
+
+        System.out.println("Enhanced table styling setup completed");
+    }
+    
+    private double getDendaByKondisi(String kondisi) {
+        switch (kondisi) {
+            case "Baik": return 0;
+            case "Rusak Ringan": return 100000; // Rp 100.000
+            case "Rusak Sedang": return 300000; // Rp 300.000
+            case "Rusak Berat": return 500000;  // Rp 500.000
+            default: return 0;
+        }
     }
 
     
@@ -1181,9 +1231,7 @@ private void hitungKembalian() {
         }
 
         try (Connection conn = koneksi.getConnection()) {
-            // Query yang benar sesuai struktur tabel
             String sql = "SELECT * FROM penyewaan_detail WHERE penyewaan_id = ?";
-
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, selectedPenyewaanId);
             ResultSet rs = ps.executeQuery();
@@ -1192,24 +1240,22 @@ private void hitungKembalian() {
             model.setRowCount(0);
 
             int no = 1;
-            int count = 0;
-
             while (rs.next()) {
-                count++;
                 Object[] row = {
                     no++,
                     rs.getString("mobil"),
                     rs.getString("no_polisi"),
                     "Baik", // Default kondisi
-                    "0", // Default denda kerusakan
+                    formatCurrency(0), // Default denda kerusakan
                     "" // Keterangan kosong
                 };
                 model.addRow(row);
 
-                System.out.println("Loaded mobil: " + rs.getString("mobil") + ", No Polisi: " + rs.getString("no_polisi"));
+                System.out.println("Loaded mobil: " + rs.getString("mobil") + 
+                                 ", No Polisi: " + rs.getString("no_polisi"));
             }
 
-            System.out.println("Total mobil loaded: " + count);
+            System.out.println("Total mobil loaded: " + (no - 1));
 
         } catch (SQLException e) {
             System.err.println("Error loading mobil detail: " + e.getMessage());
@@ -1230,32 +1276,62 @@ private void hitungKembalian() {
             String tanggalKembaliAktual = txtKembaliRill.getText().trim();
 
             if (!tanggalJatuhTempo.isEmpty() && !tanggalKembaliAktual.isEmpty()) {
-                // Parse tanggal dengan format yang benar
                 SimpleDateFormat inputFormat = new SimpleDateFormat("yyyy-MM-dd");
                 Date dateJatuhTempo = inputFormat.parse(tanggalJatuhTempo);
                 Date dateKembaliAktual = inputFormat.parse(tanggalKembaliAktual);
 
                 long diffInMillies = dateKembaliAktual.getTime() - dateJatuhTempo.getTime();
-                long diffInDays = TimeUnit.DAYS.convert(diffInMillies, TimeUnit.MILLISECONDS);
+                long diffInHours = TimeUnit.HOURS.convert(diffInMillies, TimeUnit.MILLISECONDS);
 
-                if (diffInDays > 0) {
-                    txtKeterlambatan.setText(diffInDays + " hari");
-                    double dendaKeterlambatan = diffInDays * DENDA_PER_HARI;
+                if (diffInHours > 0) {
+
+                    String keterlambatanText;
+                    if (diffInHours >= 24) {
+                        long days = diffInHours / 24;
+                        long remainingHours = diffInHours % 24;
+                        keterlambatanText = days + " hari " + remainingHours + " jam (TERLAMBAT)";
+                    } else {
+                        keterlambatanText = diffInHours + " jam (TERLAMBAT)";
+                    }
+
+                    txtKeterlambatan.setText(keterlambatanText);
+
+                    double dendaKeterlambatan = diffInHours * DENDA_PER_JAM;
                     txtDenda.setText(currencyFormat.format(dendaKeterlambatan));
+
+                } else if (diffInHours < 0) {
+
+                    long earlyHours = Math.abs(diffInHours);
+                    String keterlambatanText;
+
+                    if (earlyHours >= 24) {
+                        long days = earlyHours / 24;
+                        long remainingHours = earlyHours % 24;
+                        keterlambatanText = days + " hari " + remainingHours + " jam (LEBIH AWAL)";
+                    } else {
+                        keterlambatanText = earlyHours + " jam (LEBIH AWAL)";
+                    }
+
+                    txtKeterlambatan.setText(keterlambatanText);
+                    txtDenda.setText(currencyFormat.format(0));
+
+                    System.out.println("Pengembalian dini: " + earlyHours + " jam lebih awal");
+
                 } else {
-                    txtKeterlambatan.setText("0 hari");
+
+                    txtKeterlambatan.setText("Tepat waktu");
                     txtDenda.setText(currencyFormat.format(0));
                 }
 
                 hitungTotalPembayaran();
             }
         } catch (Exception e) {
-            txtKeterlambatan.setText("0 hari");
+            txtKeterlambatan.setText("0 jam");
             txtDenda.setText(currencyFormat.format(0));
-            System.err.println("Error calculating lateness: " + e.getMessage());
+            System.err.println("Error calculating time difference: " + e.getMessage());
         }
     }
-    
+
     private void hitungTotalPembayaran() {
         try {
             System.out.println("=== HITUNG TOTAL PEMBAYARAN ===");
@@ -1371,11 +1447,18 @@ private void hitungKembalian() {
                
                 debugMobilTableStructure();
 
-                // Simpan data
                 int pengembalianId = insertPengembalian(conn);
                 insertPengembalianDetail(conn, pengembalianId);
                 updateStatusMobil(conn);
                 updateStatusPenyewaan(conn);
+                
+                Integer driverId = getDriverIdFromPenyewaan(conn, selectedPenyewaanId);
+            
+                resetDriverStatusYangTidakDigunakan(conn);
+
+                if (driverId != null) {
+                    System.out.println("Driver ID " + driverId + " dari penyewaan " + selectedPenyewaanId + " telah dibebaskan");
+                }
 
                 conn.commit();
                 JOptionPane.showMessageDialog(this, 
@@ -1429,47 +1512,77 @@ private void hitungKembalian() {
     }
     
     private int insertPengembalian(Connection conn) throws SQLException {
-        System.out.println("=== INSERTING PENGEMBALIAN ===");
+        System.out.println("=== INSERTING PENGEMBALIAN (ENHANCED FOR EARLY RETURNS) ===");
 
-        String sql = """
-            INSERT INTO pengembalian (kode_pengembalian, penyewaan_id, tanggal_kembali_aktual, 
-            total_denda, total_biaya_tambahan, total_bayar, status, keterangan, user_id) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """;
+        String checkColumnSql = "SHOW COLUMNS FROM pengembalian LIKE 'jam_keterlambatan'";
+        PreparedStatement checkPs = conn.prepareStatement(checkColumnSql);
+        ResultSet checkRs = checkPs.executeQuery();
+
+        boolean hasJamKeterlambatanColumn = checkRs.next();
+        checkRs.close();
+        checkPs.close();
+
+        String sql;
+        if (hasJamKeterlambatanColumn) {
+
+            sql = """
+                INSERT INTO pengembalian (kode_pengembalian, penyewaan_id, tanggal_kembali_aktual, 
+                jam_keterlambatan, total_denda, total_biaya_tambahan, total_bayar, status, keterangan, user_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        } else {
+
+            sql = """
+                INSERT INTO pengembalian (kode_pengembalian, penyewaan_id, tanggal_kembali_aktual, 
+                total_denda, total_biaya_tambahan, total_bayar, status, keterangan, user_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        }
 
         PreparedStatement ps = conn.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS);
 
-        // Generate kode pengembalian
         String kodePengembalian = generateKodePengembalian();
+        int jamSelisih = hitungJamSelisih();
 
-        // Hitung total denda (keterlambatan + kerusakan)
         double dendaKeterlambatan = parseDoubleFromCurrency(txtDenda.getText());
         double dendaKerusakan = hitungTotalDendaKerusakan();
         double totalDenda = dendaKeterlambatan + dendaKerusakan;
-
-        // Biaya tambahan (sisa pembayaran)
         double biayaTambahan = parseDoubleFromCurrency(txtSisa.getText());
-
-        // Total bayar
         double totalBayar = parseDoubleFromCurrency(txtPelunasan.getText());
 
-        System.out.println("Values to insert:");
-        System.out.println("  kode_pengembalian: " + kodePengembalian);
-        System.out.println("  penyewaan_id: " + selectedPenyewaanId);
-        System.out.println("  tanggal_kembali_aktual: " + txtKembaliRill.getText().trim());
-        System.out.println("  total_denda: " + totalDenda);
-        System.out.println("  total_biaya_tambahan: " + biayaTambahan);
-        System.out.println("  total_bayar: " + totalBayar);
+        String keterangan;
+        if (jamSelisih > 0) {
+            keterangan = "Pengembalian terlambat " + jamSelisih + " jam";
+        } else if (jamSelisih < 0) {
+            keterangan = "Pengembalian lebih awal " + Math.abs(jamSelisih) + " jam";
+        } else {
+            keterangan = "Pengembalian tepat waktu";
+        }
+
+        System.out.println("Enhanced values for early/late returns:");
+        System.out.println("  jam_selisih: " + jamSelisih + " (negatif = dini, positif = telat)");
+        System.out.println("  keterangan: " + keterangan);
 
         ps.setString(1, kodePengembalian);
         ps.setInt(2, selectedPenyewaanId);
         ps.setString(3, txtKembaliRill.getText().trim());
-        ps.setDouble(4, totalDenda);
-        ps.setDouble(5, biayaTambahan);
-        ps.setDouble(6, totalBayar);
-        ps.setString(7, "Selesai");
-        ps.setString(8, "Pengembalian berhasil diproses");
-        ps.setInt(9, 1); // User ID
+
+        if (hasJamKeterlambatanColumn) {
+            ps.setInt(4, jamSelisih);
+            ps.setDouble(5, totalDenda);
+            ps.setDouble(6, biayaTambahan);
+            ps.setDouble(7, totalBayar);
+            ps.setString(8, "selesai");
+            ps.setString(9, keterangan);
+            ps.setInt(10, 1);
+        } else {
+            ps.setDouble(4, totalDenda);
+            ps.setDouble(5, biayaTambahan);
+            ps.setDouble(6, totalBayar);
+            ps.setString(7, "selesai");
+            ps.setString(8, keterangan);
+            ps.setInt(9, 1);
+        }
 
         ps.executeUpdate();
 
@@ -1481,7 +1594,28 @@ private void hitungKembalian() {
         }
         throw new SQLException("Failed to get generated ID");
     }
-    
+
+    private int hitungJamSelisih() {
+        try {
+            String tanggalJatuhTempo = txtJatuhTempo.getText().trim();
+            String tanggalKembaliAktual = txtKembaliRill.getText().trim();
+
+            if (!tanggalJatuhTempo.isEmpty() && !tanggalKembaliAktual.isEmpty()) {
+                SimpleDateFormat inputFormat = new SimpleDateFormat("yyyy-MM-dd");
+                Date dateJatuhTempo = inputFormat.parse(tanggalJatuhTempo);
+                Date dateKembaliAktual = inputFormat.parse(tanggalKembaliAktual);
+
+                long diffInMillies = dateKembaliAktual.getTime() - dateJatuhTempo.getTime();
+                long diffInHours = TimeUnit.HOURS.convert(diffInMillies, TimeUnit.MILLISECONDS);
+
+                return (int) diffInHours; // Bisa negatif untuk pengembalian dini
+            }
+        } catch (Exception e) {
+            System.err.println("Error calculating hour difference: " + e.getMessage());
+        }
+        return 0;
+    }
+ 
     public void debugMobilTableStructure() {
         try (Connection conn = koneksi.getConnection()) {
             System.out.println("=== STRUKTUR TABEL MOBIL ===");
@@ -1504,6 +1638,38 @@ private void hitungKembalian() {
         } catch (SQLException e) {
             System.err.println("Error checking mobil table structure: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    private void debugDriverStatusAfterReturn() {
+        try (Connection conn = koneksi.getConnection()) {
+            String sql = """
+                SELECT d.id, d.nama, d.status,
+                       CASE 
+                           WHEN p.driver_id IS NOT NULL THEN 'Sedang digunakan'
+                           ELSE 'Tidak digunakan'
+                       END as usage_status
+                FROM driver d
+                LEFT JOIN penyewaan p ON d.id = p.driver_id AND p.status = 'aktif'
+                ORDER BY d.nama
+            """;
+
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery();
+
+            System.out.println("=== Status Driver Setelah Pengembalian ===");
+            while (rs.next()) {
+                System.out.println(String.format("ID: %d, Nama: %s, Status: %s, Usage: %s",
+                    rs.getInt("id"),
+                    rs.getString("nama"),
+                    rs.getString("status"),
+                    rs.getString("usage_status")
+                ));
+            }
+            System.out.println("==========================================");
+
+        } catch (SQLException e) {
+            System.err.println("Error debug driver status: " + e.getMessage());
         }
     }
     
@@ -1581,56 +1747,43 @@ private void hitungKembalian() {
         }
     
     private void insertPengembalianDetail(Connection conn, int pengembalianId) throws SQLException {
-    System.out.println("=== INSERTING PENGEMBALIAN DETAIL ===");
-    
-    // Query berdasarkan struktur tabel yang sebenarnya
-    String sql = """
-        INSERT INTO pengembalian_detail (pengembalian_id, mobil_id, kondisi_mobil, 
-        denda_keterlambatan, denda_kerusakan, biaya_tambahan, keterangan_kondisi) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """;
+        System.out.println("=== INSERTING ENHANCED PENGEMBALIAN DETAIL ===");
+        
+        String sql = """
+            INSERT INTO pengembalian_detail (pengembalian_id, mobil_id, kondisi_mobil, 
+            denda_kerusakan, keterangan_kondisi, created_at) 
+            VALUES (?, ?, ?, ?, ?, NOW())
+            """;
 
-    PreparedStatement ps = conn.prepareStatement(sql);
+        PreparedStatement ps = conn.prepareStatement(sql);
         DefaultTableModel model = (DefaultTableModel) jTable1.getModel();
 
         for (int i = 0; i < model.getRowCount(); i++) {
-            System.out.println("Processing row " + i + ":");
+            System.out.println("Processing enhanced row " + i + ":");
 
-            // Ambil data dari tabel
-            String mobilName = model.getValueAt(i, 1).toString(); // Nama mobil
-            String noPolisi = model.getValueAt(i, 2).toString();  // No polisi
-            String kondisi = model.getValueAt(i, 3).toString();   // Kondisi
-            String dendaKerusakanStr = model.getValueAt(i, 4).toString(); // Denda kerusakan
-            String keterangan = model.getValueAt(i, 5).toString(); // Keterangan
+            String mobilName = model.getValueAt(i, 1).toString();
+            String noPolisi = model.getValueAt(i, 2).toString();
+            String kondisi = model.getValueAt(i, 3).toString();
+            String dendaKerusakanStr = model.getValueAt(i, 4).toString();
+            String keterangan = model.getValueAt(i, 5).toString();
 
-            // Dapatkan mobil_id berdasarkan nama mobil atau no polisi
             int mobilId = getMobilIdByNameOrPlate(mobilName, noPolisi);
+            double dendaKerusakan = parseDoubleFromCurrency(dendaKerusakanStr);
 
-            // Parse denda kerusakan
-            double dendaKerusakan = parseFromCurrency(dendaKerusakanStr);
-
-            // Set values ke PreparedStatement
             ps.setInt(1, pengembalianId);
             ps.setInt(2, mobilId);
             ps.setString(3, kondisi);
-            ps.setDouble(4, 0.0); // denda_keterlambatan (tidak digunakan di detail)
-            ps.setDouble(5, dendaKerusakan);
-            ps.setDouble(6, 0.0); // biaya_tambahan (bisa disesuaikan jika diperlukan)
-            ps.setString(7, keterangan);
+            ps.setDouble(4, dendaKerusakan);
+            ps.setString(5, keterangan);
 
-            System.out.println("  pengembalian_id: " + pengembalianId);
-            System.out.println("  mobil_id: " + mobilId + " (dari " + mobilName + "/" + noPolisi + ")");
-            System.out.println("  kondisi_mobil: " + kondisi);
-            System.out.println("  denda_keterlambatan: 0.0");
-            System.out.println("  denda_kerusakan: " + dendaKerusakan);
-            System.out.println("  biaya_tambahan: 0.0");
-            System.out.println("  keterangan_kondisi: " + keterangan);
+            System.out.println("  Enhanced detail - kondisi: " + kondisi + 
+                             ", denda: " + dendaKerusakan);
 
             ps.executeUpdate();
         }
 
         ps.close();
-        System.out.println("Detail pengembalian berhasil disimpan!");
+        System.out.println("Enhanced detail pengembalian berhasil disimpan!");
     }
     
     private int getMobilIdByNameOrPlate(String mobilName, String noPolisi) throws SQLException {
@@ -1694,10 +1847,12 @@ private void hitungKembalian() {
         ps.setInt(1, selectedPenyewaanId);
         ps.executeUpdate();
         ps.close();
+        
+        debugDriverStatusAfterReturn();
     }
     
     private void updateStatusMobil(Connection conn) throws SQLException {
-        // Ambil semua no_polisi dari penyewaan_detail
+
         String selectSql = "SELECT no_polisi FROM penyewaan_detail WHERE penyewaan_id = ?";
         PreparedStatement selectPs = conn.prepareStatement(selectSql);
         selectPs.setInt(1, selectedPenyewaanId);
@@ -1718,7 +1873,45 @@ private void hitungKembalian() {
         selectPs.close();
         updatePs.close();
     }
-    
+
+    private void updateStatusDriver(Connection conn, int driverId, String status) throws SQLException {
+        String sql = "UPDATE driver SET status = ? WHERE id = ?";
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setString(1, status);
+        ps.setInt(2, driverId);
+        int rowsAffected = ps.executeUpdate();
+        System.out.println("Driver ID " + driverId + " status updated to: " + status + " (Rows affected: " + rowsAffected + ")");
+    }
+
+
+    private void resetDriverStatusYangTidakDigunakan(Connection conn) throws SQLException {
+        String sql = """
+            UPDATE driver SET status = 'tidak aktif' 
+            WHERE id NOT IN (
+                SELECT DISTINCT driver_id 
+                FROM penyewaan 
+                WHERE driver_id IS NOT NULL 
+                AND status IN ('Aktif', 'aktif')
+            )
+        """;
+
+        PreparedStatement ps = conn.prepareStatement(sql);
+        int rowsAffected = ps.executeUpdate();
+        System.out.println("Reset status driver yang tidak digunakan: " + rowsAffected + " drivers");
+    }
+
+    private Integer getDriverIdFromPenyewaan(Connection conn, int penyewaanId) throws SQLException {
+        String sql = "SELECT driver_id FROM penyewaan WHERE id = ?";
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setInt(1, penyewaanId);
+        ResultSet rs = ps.executeQuery();
+
+        if (rs.next()) {
+            return rs.getObject("driver_id", Integer.class);
+        }
+        return null;
+    }
+
     private String generateKodePengembalian() {
         String dateStr = new SimpleDateFormat("yyyyMMdd").format(new Date());
         String kode = "PG-" + dateStr + "-" + String.format("%03d", (int)(Math.random() * 999) + 1);
@@ -2055,7 +2248,7 @@ private void hitungKembalian() {
 
         jLabel2.setFont(new java.awt.Font("Poppins ExtraBold", 0, 24)); // NOI18N
         jLabel2.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel2.setText("PLESIRAN YK > TRANSAKSI > PENYEWAAN > TAMBAH");
+        jLabel2.setText("PLESIRAN YK > TRANSAKSI > PENGEMBALIAN > PROSES");
 
         javax.swing.GroupLayout jPanel3Layout = new javax.swing.GroupLayout(jPanel3);
         jPanel3.setLayout(jPanel3Layout);

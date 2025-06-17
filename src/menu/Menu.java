@@ -64,7 +64,7 @@ public class Menu extends JScrollPane {
         lblBrand.setHorizontalAlignment(SwingConstants.LEFT);
         
         // Label untuk tagline
-        JLabel lblTagline = new JLabel("Partner Perjalanan Anda");
+        JLabel lblTagline = new JLabel("We Serve A Better Service For Your Trip");
         lblTagline.setFont(new Font("Poppins", Font.PLAIN, 12));
         lblTagline.setForeground(new Color(255, 255, 255, 200)); // Putih dengan transparansi
         lblTagline.setHorizontalAlignment(SwingConstants.LEFT);
@@ -100,6 +100,7 @@ public class Menu extends JScrollPane {
         // Laporan (index 3)
         addMenu(new ModelMenu("report", "Laporan", ModelMenu.MenuType.MENU), 3);
         addSubMenu(new ModelMenu("rentalreport", "Laporan Penyewaan", ModelMenu.MenuType.MENU), 3, 1);
+        addSubMenu(new ModelMenu("carreport", "Laporan Mobil", ModelMenu.MenuType.MENU), 3, 2);
         
         // Logout (index 11)
         addMenu(new ModelMenu("logout", "Logout", ModelMenu.MenuType.MENU), 11);

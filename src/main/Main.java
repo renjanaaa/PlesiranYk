@@ -6,6 +6,7 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.formdev.flatlaf.util.UIScale;
 import form.FormDashboard;
 import form.FormDriver;
+import form.FormLaporanMobil;
 import form.FormLaporanPenyewaan;
 import form.FormMobil;
 import form.FormPelanggan;
@@ -70,8 +71,8 @@ public class Main extends JPanel {
                 case 2: // Transaksi
                     handleTransaksiMenu(subIndex, action);
                     break;
-                case 3: // Laporan
-                    showForm(new FormLaporanPenyewaan());
+                case 3:
+                    handleLaporanMenu(subIndex, action);
                     break;
                 case 11: // Logout
                     handleLogout();
@@ -107,6 +108,20 @@ public class Main extends JPanel {
                 break;
             case 2: // Pengembalian
                 showForm(new FormPengembalian());
+                break;
+            default:
+                if (action != null) action.cancel();
+                break;
+        }
+    }
+    
+    private void handleLaporanMenu(int subIndex, MenuAction action) {
+        switch (subIndex) {
+            case 1: // Laporan Penyewaan
+                showForm(new FormLaporanPenyewaan());
+                break;
+            case 2: // Laporan Mobil - INI YANG HILANG!
+                showForm(new FormLaporanMobil());
                 break;
             default:
                 if (action != null) action.cancel();
